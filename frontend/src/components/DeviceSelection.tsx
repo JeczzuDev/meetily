@@ -4,6 +4,7 @@ import { listen } from '@tauri-apps/api/event';
 import { RefreshCw, Mic, Speaker } from 'lucide-react';
 import { AudioLevelMeter, CompactAudioLevelMeter } from './AudioLevelMeter';
 import { AudioBackendSelector } from './AudioBackendSelector';
+import { AudioGainControls } from './AudioGainControls';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import Analytics from '@/lib/analytics';
@@ -368,6 +369,11 @@ export function DeviceSelection({ selectedDevices, onDeviceChange, disabled = fa
               <AudioBackendSelector disabled={disabled} />
             </div>
           )}
+        </div>
+
+        {/* Audio Gain Controls */}
+        <div className="pt-3 border-t border-gray-100">
+          <AudioGainControls disabled={disabled} />
         </div>
       </div>
 
