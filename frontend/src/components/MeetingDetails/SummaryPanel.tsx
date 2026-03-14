@@ -48,6 +48,10 @@ interface SummaryPanelProps {
   onTemplateSelect: (templateId: string, templateName: string) => void;
   isModelConfigLoading?: boolean;
   onOpenModelSettings?: (openFn: () => void) => void;
+  // Smart Notes
+  onToggleSmartNotes?: () => void;
+  smartNotesCount?: number;
+  isSmartNotesOpen?: boolean;
 }
 
 export function SummaryPanel({
@@ -83,7 +87,10 @@ export function SummaryPanel({
   selectedTemplate,
   onTemplateSelect,
   isModelConfigLoading = false,
-  onOpenModelSettings
+  onOpenModelSettings,
+  onToggleSmartNotes,
+  smartNotesCount = 0,
+  isSmartNotesOpen = false,
 }: SummaryPanelProps) {
   const isSummaryLoading = summaryStatus === 'processing' || summaryStatus === 'summarizing' || summaryStatus === 'regenerating';
 
@@ -118,6 +125,9 @@ export function SummaryPanel({
                 hasTranscripts={transcripts.length > 0}
                 isModelConfigLoading={isModelConfigLoading}
                 onOpenModelSettings={onOpenModelSettings}
+                onToggleSmartNotes={onToggleSmartNotes}
+                smartNotesCount={smartNotesCount}
+                isSmartNotesOpen={isSmartNotesOpen}
               />
             </div>
 
@@ -158,6 +168,9 @@ export function SummaryPanel({
               hasTranscripts={transcripts.length > 0}
               isModelConfigLoading={isModelConfigLoading}
               onOpenModelSettings={onOpenModelSettings}
+              onToggleSmartNotes={onToggleSmartNotes}
+              smartNotesCount={smartNotesCount}
+              isSmartNotesOpen={isSmartNotesOpen}
             />
           </div>
           {/* Loading spinner */}
@@ -186,6 +199,9 @@ export function SummaryPanel({
               hasTranscripts={transcripts.length > 0}
               isModelConfigLoading={isModelConfigLoading}
               onOpenModelSettings={onOpenModelSettings}
+              onToggleSmartNotes={onToggleSmartNotes}
+              smartNotesCount={smartNotesCount}
+              isSmartNotesOpen={isSmartNotesOpen}
             />
           </div>
           {/* Empty state message */}

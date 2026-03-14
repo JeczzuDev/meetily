@@ -28,6 +28,14 @@ interface TranscriptPanelProps {
   meetingId?: string;
   meetingFolderPath?: string | null;
   onRefetchTranscripts?: () => Promise<void>;
+
+  // Smart Notes props
+  onGenerateNote?: (segmentId: string, segmentText: string) => void;
+  activeSegmentId?: string | null;
+  processedSegmentIds?: Set<string>;
+  isGenerating?: boolean;
+  hoveredNoteSegmentId?: string | null;
+  onHoverSegment?: (segmentId: string | null) => void;
 }
 
 export function TranscriptPanel({
@@ -48,6 +56,12 @@ export function TranscriptPanel({
   meetingId,
   meetingFolderPath,
   onRefetchTranscripts,
+  onGenerateNote,
+  activeSegmentId,
+  processedSegmentIds,
+  isGenerating,
+  hoveredNoteSegmentId,
+  onHoverSegment,
 }: TranscriptPanelProps) {
   // Convert transcripts to segments if pagination is not used but we want virtualization
   const convertedSegments = useMemo(() => {
@@ -94,6 +108,12 @@ export function TranscriptPanel({
           totalCount={totalCount}
           loadedCount={loadedCount}
           onLoadMore={onLoadMore}
+          onGenerateNote={onGenerateNote}
+          activeSegmentId={activeSegmentId}
+          processedSegmentIds={processedSegmentIds}
+          isGenerating={isGenerating}
+          hoveredNoteSegmentId={hoveredNoteSegmentId}
+          onHoverSegment={onHoverSegment}
         />
       </div>
 

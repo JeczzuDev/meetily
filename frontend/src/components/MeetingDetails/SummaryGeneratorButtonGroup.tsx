@@ -16,7 +16,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Sparkles, Settings, Loader2, FileText, Check, Square } from 'lucide-react';
+import { Sparkles, Settings, Loader2, FileText, Check, Square, NotebookPen } from 'lucide-react';
 import Analytics from '@/lib/analytics';
 import { invoke } from '@tauri-apps/api/core';
 import { toast } from 'sonner';
@@ -38,6 +38,10 @@ interface SummaryGeneratorButtonGroupProps {
   hasTranscripts?: boolean;
   isModelConfigLoading?: boolean;
   onOpenModelSettings?: (openFn: () => void) => void;
+  // Smart Notes
+  onToggleSmartNotes?: () => void;
+  smartNotesCount?: number;
+  isSmartNotesOpen?: boolean;
 }
 
 export function SummaryGeneratorButtonGroup({
@@ -53,7 +57,10 @@ export function SummaryGeneratorButtonGroup({
   onTemplateSelect,
   hasTranscripts = true,
   isModelConfigLoading = false,
-  onOpenModelSettings
+  onOpenModelSettings,
+  onToggleSmartNotes,
+  smartNotesCount = 0,
+  isSmartNotesOpen = false,
 }: SummaryGeneratorButtonGroupProps) {
   const [isCheckingModels, setIsCheckingModels] = useState(false);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
@@ -347,6 +354,25 @@ export function SummaryGeneratorButtonGroup({
 
           </DropdownMenuContent>
         </DropdownMenu>
+      )}
+
+      {/* Smart Notes toggle */}
+      {onToggleSmartNotes && (
+        <Button
+          variant="outline"
+          size="sm"
+          className={isSmartNotesOpen ? 'bg-blue-50 border-blue-200 text-blue-700' : ''}
+          onClick={onToggleSmartNotes}
+          title={isSmartNotesOpen ? 'Close Smart Notes' : 'Open Smart Notes'}
+        >
+          <NotebookPen className="xl:mr-2" size={18} />
+          <span className="hidden lg:inline xl:inline">Smart Notes</span>
+          {smartNotesCount > 0 && (
+            <span className="ml-1 text-xs bg-blue-100 text-blue-700 rounded-full px-1.5 py-0.5">
+              {smartNotesCount}
+            </span>
+          )}
+        </Button>
       )}
     </ButtonGroup>
   );

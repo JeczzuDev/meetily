@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Summary, SummaryResponse } from '@/types';
 import { useSidebar } from '@/components/Sidebar/SidebarProvider';
@@ -9,6 +9,9 @@ import { toast } from 'sonner';
 import { TranscriptPanel } from '@/components/MeetingDetails/TranscriptPanel';
 import { SummaryPanel } from '@/components/MeetingDetails/SummaryPanel';
 import { ModelConfig } from '@/components/ModelSettingsModal';
+import { SmartNotesPanel } from '@/components/SmartNotes/SmartNotesPanel';
+import { useSmartNotes } from '@/hooks/useSmartNotes';
+import type { ContextSegment } from '@/types/smartNotes';
 
 // Custom hooks
 import { useMeetingData } from '@/hooks/meeting-details/useMeetingData';
@@ -65,7 +68,7 @@ export default function PageContent({
   const { serverAddress } = useSidebar();
 
   // Get model config from ConfigContext
-  const { modelConfig, setModelConfig } = useConfig();
+  const { modelConfig, setModelConfig, selectedLanguage } = useConfig();
 
   // Custom hooks
   const meetingData = useMeetingData({ meeting, summaryData, onMeetingUpdated });
@@ -134,6 +137,31 @@ export default function PageContent({
     meeting,
   });
 
+  // ── Smart Notes ────────────────────────────────
+  const [smartNotesOpen, setSmartNotesOpen] = useState(false);
+  const [useWebSearch, setUseWebSearch] = useState(false);
+  const [hoveredNoteSegmentId, setHoveredNoteSegmentId] = useState<string | null>(null);
+
+  const smartNotes = useSmartNotes({ meetingId: meeting.id });
+
+  // Build context window (clicked segment + up to 4 previous)
+  const allSegments = segments ?? [];
+
+  const handleGenerateNote = useCallback(
+    (segmentId: string, segmentText: string) => {
+      // Open panel automatically
+      setSmartNotesOpen(true);
+
+      const idx = allSegments.findIndex((s: any) => s.id === segmentId);
+      const contextSegments: ContextSegment[] = allSegments
+        .slice(Math.max(0, idx - 4), idx + 1)
+        .map((s: any) => ({ id: s.id, text: s.text, timestamp: s.timestamp }));
+
+      smartNotes.generateNote(segmentId, segmentText, contextSegments, useWebSearch, selectedLanguage);
+    },
+    [allSegments, smartNotes.generateNote, smartNotes.processedSegmentIds, useWebSearch, selectedLanguage],
+  );
+
   // Track page view
   useEffect(() => {
     Analytics.trackPageView('meeting_details');
@@ -191,6 +219,12 @@ export default function PageContent({
           meetingId={meeting.id}
           meetingFolderPath={meeting.folder_path}
           onRefetchTranscripts={onRefetchTranscripts}
+          onGenerateNote={handleGenerateNote}
+          activeSegmentId={smartNotes.activeSegmentId}
+          processedSegmentIds={smartNotes.processedSegmentIds}
+          isGenerating={smartNotes.isGenerating}
+          hoveredNoteSegmentId={hoveredNoteSegmentId}
+          onHoverSegment={setHoveredNoteSegmentId}
         />
         <SummaryPanel
           meeting={meeting}
@@ -226,6 +260,26 @@ export default function PageContent({
           onTemplateSelect={templates.handleTemplateSelection}
           isModelConfigLoading={false}
           onOpenModelSettings={handleRegisterModalOpen}
+          onToggleSmartNotes={() => setSmartNotesOpen((prev) => !prev)}
+          smartNotesCount={smartNotes.notes.length}
+          isSmartNotesOpen={smartNotesOpen}
+        />
+        <SmartNotesPanel
+          isOpen={smartNotesOpen}
+          onClose={() => setSmartNotesOpen(false)}
+          notes={smartNotes.notes}
+          status={smartNotes.status}
+          error={smartNotes.error}
+          activeSegmentId={smartNotes.activeSegmentId}
+          onDeleteNote={smartNotes.deleteNote}
+          onLoadNotes={smartNotes.loadNotes}
+          segments={allSegments}
+          onGenerateNote={handleGenerateNote}
+          useWebSearch={useWebSearch}
+          onToggleWebSearch={setUseWebSearch}
+          hoveredNoteSegmentId={hoveredNoteSegmentId}
+          onHoverNote={setHoveredNoteSegmentId}
+          overlay
         />
       </div>
     </motion.div>
