@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react"
 import { Switch } from "./ui/switch"
-import { FolderOpen } from "lucide-react"
+import { FolderOpen, Search } from "lucide-react"
 import { invoke } from "@tauri-apps/api/core"
 import Analytics from "@/lib/analytics"
 import AnalyticsConsentSwitch from "./AnalyticsConsentSwitch"
@@ -22,11 +22,20 @@ export function PreferenceSettings() {
   const [previousNotificationsEnabled, setPreviousNotificationsEnabled] = useState<boolean | null>(null);
   const hasTrackedViewRef = useRef(false);
 
+  // Search API key state (Tavily)
+  const [searchApiKey, setSearchApiKey] = useState('');
+  const [searchApiKeySaved, setSearchApiKeySaved] = useState(false);
+
   // Lazy load preferences on mount (only loads if not already cached)
   useEffect(() => {
     loadPreferences();
     // Reset tracking ref on mount (every tab visit)
     hasTrackedViewRef.current = false;
+
+    // Load search API key
+    invoke<string>('get_search_api_key_cmd')
+      .then((key) => setSearchApiKey(key))
+      .catch((err) => console.warn('Failed to load search API key:', err));
   }, [loadPreferences]);
 
   // Track preferences viewed analytics on every tab visit (once per mount)
@@ -133,6 +142,16 @@ export function PreferenceSettings() {
     }
   };
 
+  const handleSaveSearchApiKey = async () => {
+    try {
+      await invoke('save_search_api_key_cmd', { apiKey: searchApiKey });
+      setSearchApiKeySaved(true);
+      setTimeout(() => setSearchApiKeySaved(false), 2000);
+    } catch (error) {
+      console.error('Failed to save search API key:', error);
+    }
+  };
+
   // Show loading only if we're actually loading and don't have cached data
   if (isLoadingPreferences && !notificationSettings && !storageLocations) {
     return <div className="max-w-2xl mx-auto p-6">Loading Preferences...</div>
@@ -223,6 +242,48 @@ export function PreferenceSettings() {
       {/* Analytics Section */}
       <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
         <AnalyticsConsentSwitch />
+      </div>
+
+      {/* Smart Notes — Tavily Search API Key */}
+      <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
+        <div className="flex items-center gap-2 mb-2">
+          <Search className="w-4 h-4 text-blue-600" />
+          <h3 className="text-lg font-semibold text-gray-900">Smart Notes — Web Search</h3>
+        </div>
+        <p className="text-sm text-gray-600 mb-4">
+          Provide a Tavily Search API key to enable web-enriched Smart Notes.
+          Get a free key at{' '}
+          <a
+            href="https://app.tavily.com/home"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-600 hover:underline"
+          >
+            app.tavily.com
+          </a>
+        </p>
+        <div className="flex gap-2">
+          <input
+            type="password"
+            value={searchApiKey}
+            onChange={(e) => {
+              setSearchApiKey(e.target.value);
+              setSearchApiKeySaved(false);
+            }}
+            placeholder="tvly-xxxxxxxx"
+            className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+          />
+          <button
+            onClick={handleSaveSearchApiKey}
+            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+              searchApiKeySaved
+                ? 'bg-green-100 text-green-700'
+                : 'bg-blue-600 text-white hover:bg-blue-700'
+            }`}
+          >
+            {searchApiKeySaved ? 'Saved' : 'Save'}
+          </button>
+        </div>
       </div>
     </div>
   )
