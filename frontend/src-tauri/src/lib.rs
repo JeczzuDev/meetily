@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Mutex as StdMutex;
 // Removed unused import
 
@@ -68,6 +68,11 @@ static RECORDING_FLAG: AtomicBool = AtomicBool::new(false);
 // Global language preference storage (default to "auto-translate" for automatic translation to English)
 static LANGUAGE_PREFERENCE: std::sync::LazyLock<StdMutex<String>> =
     std::sync::LazyLock::new(|| StdMutex::new("auto-translate".to_string()));
+
+// Global audio gain controls (stored as f32 bits in AtomicU32 for lock-free access on hot path)
+// Default: mic=1.0, system=1.0 — user can adjust to fix volume imbalance between sources
+static MIC_GAIN: AtomicU32 = AtomicU32::new(1065353216);    // f32::to_bits(1.0)
+static SYSTEM_GAIN: AtomicU32 = AtomicU32::new(1065353216); // f32::to_bits(1.0)
 
 #[derive(Debug, Deserialize)]
 struct RecordingArgs {
@@ -388,6 +393,30 @@ pub fn get_language_preference_internal() -> Option<String> {
     LANGUAGE_PREFERENCE.lock().ok().map(|lang| lang.clone())
 }
 
+#[tauri::command]
+async fn set_audio_gains(mic_gain: f32, system_gain: f32) -> Result<(), String> {
+    let mic = mic_gain.clamp(0.0, 3.0);
+    let sys = system_gain.clamp(0.0, 3.0);
+    MIC_GAIN.store(mic.to_bits(), Ordering::Relaxed);
+    SYSTEM_GAIN.store(sys.to_bits(), Ordering::Relaxed);
+    log_info!("Audio gains updated: mic={:.2}, system={:.2}", mic, sys);
+    Ok(())
+}
+
+#[tauri::command]
+async fn get_audio_gains() -> Result<(f32, f32), String> {
+    let mic = f32::from_bits(MIC_GAIN.load(Ordering::Relaxed));
+    let sys = f32::from_bits(SYSTEM_GAIN.load(Ordering::Relaxed));
+    Ok((mic, sys))
+}
+
+/// Lock-free access to current audio gains (called from audio mixing hot path)
+pub fn get_audio_gains_internal() -> (f32, f32) {
+    let mic = f32::from_bits(MIC_GAIN.load(Ordering::Relaxed));
+    let sys = f32::from_bits(SYSTEM_GAIN.load(Ordering::Relaxed));
+    (mic, sys)
+}
+
 pub fn run() {
     log::set_max_level(log::LevelFilter::Info);
 
@@ -668,6 +697,9 @@ pub fn run() {
             audio::recording_preferences::get_audio_backend_info,
             // Language preference commands
             set_language_preference,
+            // Audio gain commands
+            set_audio_gains,
+            get_audio_gains,
             // Notification system commands
             notifications::commands::get_notification_settings,
             notifications::commands::set_notification_settings,
