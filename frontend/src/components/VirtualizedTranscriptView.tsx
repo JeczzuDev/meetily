@@ -9,6 +9,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 import { RecordingStatusBar } from "./RecordingStatusBar";
 import { motion, AnimatePresence } from "framer-motion";
 import { TranscriptSegmentData } from "@/types";
+import { Sparkles, CheckCircle } from "lucide-react";
 
 export interface VirtualizedTranscriptViewProps {
     /** Transcript segments to display */
@@ -27,6 +28,18 @@ export interface VirtualizedTranscriptViewProps {
     showConfidence?: boolean;
     /** Completely disable auto-scroll behavior (for meeting details page) */
     disableAutoScroll?: boolean;
+    /** Callback when user clicks the Smart Note ✨ button on a segment */
+    onGenerateNote?: (segmentId: string, segmentText: string) => void;
+    /** Segment currently being processed for Smart Note generation */
+    activeSegmentId?: string | null;
+    /** Set of segment IDs that already have a Smart Note generated */
+    processedSegmentIds?: Set<string>;
+    /** Whether a Smart Note is currently being generated (disables buttons) */
+    isGenerating?: boolean;
+    /** Segment ID being hovered in SmartNotesPanel (for cross-highlighting) */
+    hoveredNoteSegmentId?: string | null;
+    /** Called when user hovers a processed transcript segment */
+    onHoverSegment?: (segmentId: string | null) => void;
 
     // Pagination props (infinite scroll)
     hasMore?: boolean;
@@ -63,6 +76,43 @@ function cleanStopWords(text: string): string {
     return cleanedText.replace(/\s+/g, ' ').trim();
 }
 
+// Helper: check if text is meaningful enough for a Smart Note
+function isNoteworthy(text: string): boolean {
+    const cleaned = cleanStopWords(text);
+    if (!cleaned || cleaned === '[Silence]') return false;
+    return cleaned.split(/\s+/).length >= 3;
+}
+
+// Component for streaming text display
+const StreamingTextContainer = ({ displayText }: { displayText: string }) => (
+    <div className="bg-gray-100 border border-gray-200 rounded-lg px-3 py-2">
+        <p className="text-base text-gray-800 leading-relaxed">{displayText}</p>
+    </div>
+);
+
+// Component for highlighted text display
+const HighlightedTextContainer = ({ displayText }: { displayText: string }) => (
+    <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+        <p className="text-base text-gray-800 leading-relaxed">{displayText}</p>
+    </div>
+);
+
+// Component for default text display
+const DefaultTextContainer = ({ displayText }: { displayText: string }) => (
+    <p className="text-base border border-transparent text-gray-800 leading-relaxed px-3 py-2">{displayText}</p>
+);
+
+// Helper function to get the appropriate text container component
+function getTextContainer(isStreaming: boolean, isHighlighted: boolean, displayText: string): React.ReactNode {
+    if (isStreaming) {
+        return <StreamingTextContainer displayText={displayText} />;
+    }
+    if (isHighlighted) {
+        return <HighlightedTextContainer displayText={displayText} />;
+    }
+    return <DefaultTextContainer displayText={displayText} />;
+}
+
 // Memoized transcript segment component
 const TranscriptSegment = memo(function TranscriptSegment({
     id,
@@ -71,6 +121,12 @@ const TranscriptSegment = memo(function TranscriptSegment({
     confidence,
     isStreaming,
     showConfidence,
+    onGenerateNote,
+    isActive,
+    isProcessed,
+    isGenerating,
+    isHighlighted,
+    onHoverSegment,
 }: {
     id: string;
     timestamp: number;
@@ -78,11 +134,23 @@ const TranscriptSegment = memo(function TranscriptSegment({
     confidence?: number;
     isStreaming: boolean;
     showConfidence: boolean;
+    onGenerateNote?: (segmentId: string, segmentText: string) => void;
+    isActive?: boolean;
+    isProcessed?: boolean;
+    isGenerating?: boolean;
+    isHighlighted?: boolean;
+    onHoverSegment?: (segmentId: string | null) => void;
 }) {
     const displayText = cleanStopWords(text) || (text.trim() === '' ? '[Silence]' : text);
+    const canGenerateNote = onGenerateNote && isNoteworthy(text);
 
     return (
-        <div id={`segment-${id}`} className="mb-3">
+        <div
+            id={`segment-${id}`}
+            className={`mb-3 text-left group transition-colors duration-150`}
+            onMouseEnter={isProcessed && onHoverSegment ? () => onHoverSegment(id) : undefined}
+            onMouseLeave={isProcessed && onHoverSegment ? () => onHoverSegment(null) : undefined}
+        >
             <div className="flex items-start gap-2">
                 <Tooltip>
                     <TooltipTrigger>
@@ -97,14 +165,35 @@ const TranscriptSegment = memo(function TranscriptSegment({
                     </TooltipContent>
                 </Tooltip>
                 <div className="flex-1">
-                    {isStreaming ? (
-                        <div className="bg-gray-100 border border-gray-200 rounded-lg px-3 py-2">
-                            <p className="text-base text-gray-800 leading-relaxed">{displayText}</p>
-                        </div>
-                    ) : (
-                        <p className="text-base text-gray-800 leading-relaxed">{displayText}</p>
-                    )}
+                    {getTextContainer(isStreaming, isHighlighted ?? false, displayText)}
                 </div>
+                {isProcessed ? (
+                    <button
+                        type="button"
+                        onClick={() => onGenerateNote?.(id, text)}
+                        disabled={isGenerating}
+                        className={`mt-1 flex-shrink-0 p-1 rounded-md transition-colors duration-150 ${isGenerating
+                            ? 'text-gray-300 cursor-not-allowed'
+                            : 'text-green-500 hover:text-green-700 hover:bg-green-50'
+                            }`}
+                        title={isGenerating ? 'Generating...' : 'Regenerate Smart Note'}
+                    >
+                        <CheckCircle className="w-4 h-4" />
+                    </button>
+                ) : canGenerateNote ? (
+                    <button
+                        type="button"
+                        onClick={() => onGenerateNote(id, text)}
+                        disabled={isGenerating}
+                        className={`mt-1 flex-shrink-0 p-1 rounded-md transition-all duration-150 ${isGenerating
+                            ? 'text-gray-300 opacity-0 group-hover:opacity-100 cursor-not-allowed'
+                            : 'text-gray-400 opacity-0 group-hover:opacity-100 hover:text-blue-600 hover:bg-blue-50'
+                            }`}
+                        title={isGenerating ? 'Generating...' : 'Generate Smart Note'}
+                    >
+                        <Sparkles className="w-4 h-4" />
+                    </button>
+                ) : null}
             </div>
         </div>
     );
@@ -119,6 +208,12 @@ export const VirtualizedTranscriptView: React.FC<VirtualizedTranscriptViewProps>
     enableStreaming = false,
     showConfidence = true,
     disableAutoScroll = false,
+    onGenerateNote,
+    activeSegmentId,
+    processedSegmentIds,
+    isGenerating = false,
+    hoveredNoteSegmentId,
+    onHoverSegment,
     hasMore = false,
     isLoadingMore = false,
     totalCount = 0,
@@ -236,159 +331,172 @@ export const VirtualizedTranscriptView: React.FC<VirtualizedTranscriptViewProps>
 
             {/* Content - add padding when recording to prevent overlap */}
             <div className={isRecording ? 'pt-2' : ''}>
-            {segments.length === 0 ? (
-                // Empty state
-                <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    className="text-center text-gray-500 mt-8"
-                >
-                    {isRecording ? (
-                        <>
-                            <div className="flex items-center justify-center mb-3">
-                                <div className={`w-3 h-3 rounded-full ${isPaused ? 'bg-orange-500' : 'bg-blue-500 animate-pulse'}`}></div>
-                            </div>
-                            <p className="text-sm text-gray-600">
-                                {isPaused ? 'Recording paused' : 'Listening for speech...'}
-                            </p>
-                            <p className="text-xs mt-1 text-gray-400">
-                                {isPaused ? 'Click resume to continue recording' : 'Speak to see live transcription'}
-                            </p>
-                        </>
-                    ) : (
-                        <>
-                            <p className="text-lg font-semibold">Welcome to meetily!</p>
-                            <p className="text-xs mt-1">Start recording to see live transcription</p>
-                        </>
-                    )}
-                </motion.div>
-            ) : useVirtualization ? (
-                // Virtualized rendering for large lists
-                <>
-                    <div
-                        style={{
-                            height: virtualizer.getTotalSize(),
-                            width: "100%",
-                            position: "relative",
-                        }}
+                {segments.length === 0 ? (
+                    // Empty state
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        className="text-center text-gray-500 mt-8"
                     >
-                        {virtualizer.getVirtualItems().map((virtualRow) => {
-                            const segment = segments[virtualRow.index];
-                            const isStreaming = streamingSegmentId === segment.id;
-
-                            return (
-                                <div
-                                    key={segment.id}
-                                    data-index={virtualRow.index}
-                                    ref={virtualizer.measureElement}
-                                    style={{
-                                        position: "absolute",
-                                        top: 0,
-                                        left: 0,
-                                        width: "100%",
-                                        transform: `translateY(${virtualRow.start}px)`,
-                                    }}
-                                >
-                                    <TranscriptSegment
-                                        id={segment.id}
-                                        timestamp={segment.timestamp}
-                                        text={getDisplayText(segment)}
-                                        confidence={segment.confidence}
-                                        isStreaming={isStreaming}
-                                        showConfidence={showConfidence}
-                                    />
+                        {isRecording ? (
+                            <>
+                                <div className="flex items-center justify-center mb-3">
+                                    <div className={`w-3 h-3 rounded-full ${isPaused ? 'bg-orange-500' : 'bg-blue-500 animate-pulse'}`}></div>
                                 </div>
-                            );
-                        })}
-                    </div>
-
-                    {/* Infinite scroll trigger and loading indicator */}
-                    {(hasMore || isLoadingMore) && !isRecording && segments.length > 0 && (
-                        <div ref={loadMoreTriggerRef} className="flex justify-center items-center py-4 mt-2">
-                            {isLoadingMore ? (
-                                <div className="flex items-center gap-2 text-gray-500">
-                                    <div className="w-4 h-4 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
-                                    <span className="text-sm">Loading more...</span>
-                                </div>
-                            ) : hasMore && totalCount > 0 ? (
-                                <span className="text-sm text-gray-400">
-                                    Showing {loadedCount} of {totalCount} segments
-                                </span>
-                            ) : null}
-                        </div>
-                    )}
-
-                    {/* Listening indicator when recording */}
-                    {!isStopping && isRecording && !isPaused && !isProcessing && segments.length > 0 && (
-                        <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            className="flex items-center gap-2 mt-4 text-gray-500"
+                                <p className="text-sm text-gray-600">
+                                    {isPaused ? 'Recording paused' : 'Listening for speech...'}
+                                </p>
+                                <p className="text-xs mt-1 text-gray-400">
+                                    {isPaused ? 'Click resume to continue recording' : 'Speak to see live transcription'}
+                                </p>
+                            </>
+                        ) : (
+                            <>
+                                <p className="text-lg font-semibold">Welcome to meetily!</p>
+                                <p className="text-xs mt-1">Start recording to see live transcription</p>
+                            </>
+                        )}
+                    </motion.div>
+                ) : useVirtualization ? (
+                    // Virtualized rendering for large lists
+                    <>
+                        <div
+                            style={{
+                                height: virtualizer.getTotalSize(),
+                                width: "100%",
+                                position: "relative",
+                            }}
                         >
-                            <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
-                            <span className="text-sm">Listening...</span>
-                        </motion.div>
-                    )}
-                </>
-            ) : (
-                // Simple rendering for small lists (better animations)
-                <>
-                    <div className="space-y-1">
-                        {segments.map((segment) => {
-                            const isStreaming = streamingSegmentId === segment.id;
+                            {virtualizer.getVirtualItems().map((virtualRow) => {
+                                const segment = segments[virtualRow.index];
+                                const isStreaming = streamingSegmentId === segment.id;
 
-                            return (
-                                <motion.div
-                                    key={segment.id}
-                                    initial={{ opacity: 0, y: 5 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    transition={{ duration: 0.15 }}
-                                >
-                                    <TranscriptSegment
-                                        id={segment.id}
-                                        timestamp={segment.timestamp}
-                                        text={getDisplayText(segment)}
-                                        confidence={segment.confidence}
-                                        isStreaming={isStreaming}
-                                        showConfidence={showConfidence}
-                                    />
-                                </motion.div>
-                            );
-                        })}
-                    </div>
-
-                    {/* Infinite scroll trigger (for small lists that grow) */}
-                    {(hasMore || isLoadingMore) && !isRecording && segments.length > 0 && (
-                        <div ref={loadMoreTriggerRef} className="flex justify-center items-center py-4 mt-2">
-                            {isLoadingMore ? (
-                                <div className="flex items-center gap-2 text-gray-500">
-                                    <div className="w-4 h-4 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
-                                    <span className="text-sm">Loading more...</span>
-                                </div>
-                            ) : hasMore && totalCount > 0 ? (
-                                <span className="text-sm text-gray-400">
-                                    Showing {loadedCount} of {totalCount} segments
-                                </span>
-                            ) : null}
+                                return (
+                                    <div
+                                        key={segment.id}
+                                        data-index={virtualRow.index}
+                                        ref={virtualizer.measureElement}
+                                        style={{
+                                            position: "absolute",
+                                            top: 0,
+                                            left: 0,
+                                            width: "100%",
+                                            transform: `translateY(${virtualRow.start}px)`,
+                                        }}
+                                    >
+                                        <TranscriptSegment
+                                            id={segment.id}
+                                            timestamp={segment.timestamp}
+                                            text={getDisplayText(segment)}
+                                            confidence={segment.confidence}
+                                            isStreaming={isStreaming}
+                                            showConfidence={showConfidence}
+                                            onGenerateNote={onGenerateNote}
+                                            isActive={activeSegmentId === segment.id}
+                                            isProcessed={processedSegmentIds?.has(segment.id)}
+                                            isGenerating={isGenerating}
+                                            isHighlighted={hoveredNoteSegmentId === segment.id}
+                                            onHoverSegment={onHoverSegment}
+                                        />
+                                    </div>
+                                );
+                            })}
                         </div>
-                    )}
 
-                    {/* Listening indicator when recording */}
-                    {!isStopping && isRecording && !isPaused && !isProcessing && segments.length > 0 && (
-                        <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            className="flex items-center gap-2 mt-4 text-gray-500"
-                        >
-                            <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
-                            <span className="text-sm">Listening...</span>
-                        </motion.div>
-                    )}
-                </>
-            )}
+                        {/* Infinite scroll trigger and loading indicator */}
+                        {(hasMore || isLoadingMore) && !isRecording && segments.length > 0 && (
+                            <div ref={loadMoreTriggerRef} className="flex justify-center items-center py-4 mt-2">
+                                {isLoadingMore ? (
+                                    <div className="flex items-center gap-2 text-gray-500">
+                                        <div className="w-4 h-4 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
+                                        <span className="text-sm">Loading more...</span>
+                                    </div>
+                                ) : hasMore && totalCount > 0 ? (
+                                    <span className="text-sm text-gray-400">
+                                        Showing {loadedCount} of {totalCount} segments
+                                    </span>
+                                ) : null}
+                            </div>
+                        )}
+
+                        {/* Listening indicator when recording */}
+                        {!isStopping && isRecording && !isPaused && !isProcessing && segments.length > 0 && (
+                            <motion.div
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                className="flex items-center gap-2 mt-4 text-gray-500"
+                            >
+                                <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                                <span className="text-sm">Listening...</span>
+                            </motion.div>
+                        )}
+                    </>
+                ) : (
+                    // Simple rendering for small lists (better animations)
+                    <>
+                        <div className="space-y-1">
+                            {segments.map((segment) => {
+                                const isStreaming = streamingSegmentId === segment.id;
+
+                                return (
+                                    <motion.div
+                                        key={segment.id}
+                                        initial={{ opacity: 0, y: 5 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        transition={{ duration: 0.15 }}
+                                    >
+                                        <TranscriptSegment
+                                            id={segment.id}
+                                            timestamp={segment.timestamp}
+                                            text={getDisplayText(segment)}
+                                            confidence={segment.confidence}
+                                            isStreaming={isStreaming}
+                                            showConfidence={showConfidence}
+                                            onGenerateNote={onGenerateNote}
+                                            isActive={activeSegmentId === segment.id}
+                                            isProcessed={processedSegmentIds?.has(segment.id)}
+                                            isGenerating={isGenerating}
+                                            isHighlighted={hoveredNoteSegmentId === segment.id}
+                                            onHoverSegment={onHoverSegment}
+                                        />
+                                    </motion.div>
+                                );
+                            })}
+                        </div>
+
+                        {/* Infinite scroll trigger (for small lists that grow) */}
+                        {(hasMore || isLoadingMore) && !isRecording && segments.length > 0 && (
+                            <div ref={loadMoreTriggerRef} className="flex justify-center items-center py-4 mt-2">
+                                {isLoadingMore ? (
+                                    <div className="flex items-center gap-2 text-gray-500">
+                                        <div className="w-4 h-4 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
+                                        <span className="text-sm">Loading more...</span>
+                                    </div>
+                                ) : hasMore && totalCount > 0 ? (
+                                    <span className="text-sm text-gray-400">
+                                        Showing {loadedCount} of {totalCount} segments
+                                    </span>
+                                ) : null}
+                            </div>
+                        )}
+
+                        {/* Listening indicator when recording */}
+                        {!isStopping && isRecording && !isPaused && !isProcessing && segments.length > 0 && (
+                            <motion.div
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                className="flex items-center gap-2 mt-4 text-gray-500"
+                            >
+                                <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                                <span className="text-sm">Listening...</span>
+                            </motion.div>
+                        )}
+                    </>
+                )}
             </div>
         </div>
     );
 };
+

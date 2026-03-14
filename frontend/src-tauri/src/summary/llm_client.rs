@@ -290,11 +290,32 @@ pub async fn generate_summary(
     };
 
     if !response.status().is_success() {
+        let status = response.status();
         let error_body = response
             .text()
             .await
             .unwrap_or_else(|_| "Unknown error".to_string());
-        return Err(format!("LLM API request failed: {}", error_body));
+
+        // Try to extract a user-friendly message from JSON error responses
+        // Handles OpenAI {"error":{"message":"...","code":"..."}} and
+        // Claude {"error":{"type":"...","message":"..."}} formats
+        let friendly_message = serde_json::from_str::<serde_json::Value>(&error_body)
+            .ok()
+            .and_then(|json| {
+                let err_obj = json.get("error")?;
+                let msg = err_obj.get("message")?.as_str()?;
+                let code = err_obj
+                    .get("code")
+                    .or_else(|| err_obj.get("type"))
+                    .and_then(|v| v.as_str());
+                Some(match code {
+                    Some(c) => format!("{} ({})", msg, c),
+                    None => msg.to_string(),
+                })
+            });
+
+        let detail = friendly_message.unwrap_or(error_body);
+        return Err(format!("LLM API error (HTTP {}): {}", status.as_u16(), detail));
     }
 
     // Parse response based on provider

@@ -49,6 +49,7 @@ pub mod anthropic;
 pub mod groq;
 pub mod openrouter;
 pub mod parakeet_engine;
+pub mod smart_notes;
 pub mod state;
 pub mod summary;
 pub mod tray;
@@ -630,6 +631,13 @@ pub fn run() {
             api::api_save_custom_openai_config,
             api::api_get_custom_openai_config,
             api::api_test_custom_openai_connection,
+            // Smart Notes commands
+            smart_notes::generate_smart_note,
+            smart_notes::get_smart_notes,
+            smart_notes::delete_smart_note,
+            smart_notes::get_search_api_key_cmd,
+            smart_notes::save_search_api_key_cmd,
+            smart_notes::reassign_smart_notes_meeting,
             // Summary commands
             summary::api_process_transcript,
             summary::api_get_summary,
