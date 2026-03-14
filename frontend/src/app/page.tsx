@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { RecordingControls } from '@/components/RecordingControls';
 import { useSidebar } from '@/components/Sidebar/SidebarProvider';
@@ -12,6 +12,9 @@ import { StatusOverlays } from '@/app/_components/StatusOverlays';
 import Analytics from '@/lib/analytics';
 import { SettingsModals } from './_components/SettingsModal';
 import { TranscriptPanel } from './_components/TranscriptPanel';
+import { SmartNotesPanel } from '@/components/SmartNotes/SmartNotesPanel';
+import { useSmartNotes } from '@/hooks/useSmartNotes';
+import type { ContextSegment } from '@/types/smartNotes';
 import { useModalState } from '@/hooks/useModalState';
 import { useRecordingStateSync } from '@/hooks/useRecordingStateSync';
 import { useRecordingStart } from '@/hooks/useRecordingStart';
@@ -29,7 +32,7 @@ export default function Home() {
   const [showRecoveryDialog, setShowRecoveryDialog] = useState(false);
 
   // Use contexts for state management
-  const { meetingTitle } = useTranscripts();
+  const { meetingTitle, transcripts, currentMeetingId } = useTranscripts();
   const { transcriptModelConfig, selectedDevices } = useConfig();
   const recordingState = useRecordingState();
 
@@ -40,6 +43,35 @@ export default function Home() {
   const { hasMicrophone } = usePermissionCheck();
   const { setIsMeetingActive, isCollapsed: sidebarCollapsed, refetchMeetings } = useSidebar();
   const { modals, messages, showModal, hideModal } = useModalState(transcriptModelConfig);
+
+  // ── Smart Notes ────────────────────────────────
+  const [smartNotesOpen, setSmartNotesOpen] = useState(false);
+  const [useWebSearch, setUseWebSearch] = useState(false);
+  const [hoveredNoteSegmentId, setHoveredNoteSegmentId] = useState<string | null>(null);
+
+  const smartNotes = useSmartNotes({ meetingId: currentMeetingId ?? '' });
+
+  const liveSegments = transcripts.map(t => ({
+    id: t.id,
+    timestamp: t.audio_start_time ?? 0,
+    text: t.text,
+  }));
+
+  const handleGenerateNote = useCallback(
+    (segmentId: string, segmentText: string) => {
+      if (!currentMeetingId) return;
+      setSmartNotesOpen(true);
+
+      const idx = liveSegments.findIndex((s) => s.id === segmentId);
+      const contextSegments: ContextSegment[] = liveSegments
+        .slice(Math.max(0, idx - 4), idx + 1)
+        .map((s) => ({ id: s.id, text: s.text, timestamp: s.timestamp }));
+
+      smartNotes.generateNote(segmentId, segmentText, contextSegments, useWebSearch);
+    },
+    [currentMeetingId, liveSegments, smartNotes.generateNote, useWebSearch],
+  );
+
   const { isRecordingDisabled, setIsRecordingDisabled } = useRecordingStateSync(isRecording, setIsRecordingState, setIsMeetingActive);
   const { handleRecordingStart } = useRecordingStart(isRecording, setIsRecordingState, showModal);
 
@@ -217,6 +249,29 @@ export default function Home() {
           isProcessingStop={isProcessingStop}
           isStopping={isStopping}
           showModal={showModal}
+          onGenerateNote={currentMeetingId ? handleGenerateNote : undefined}
+          activeSegmentId={smartNotes.activeSegmentId}
+          processedSegmentIds={smartNotes.processedSegmentIds}
+          isGenerating={smartNotes.isGenerating}
+          hoveredNoteSegmentId={hoveredNoteSegmentId}
+          onHoverSegment={setHoveredNoteSegmentId}
+        />
+
+        <SmartNotesPanel
+          isOpen={smartNotesOpen}
+          onClose={() => setSmartNotesOpen(false)}
+          notes={smartNotes.notes}
+          status={smartNotes.status}
+          error={smartNotes.error}
+          activeSegmentId={smartNotes.activeSegmentId}
+          onDeleteNote={smartNotes.deleteNote}
+          onLoadNotes={smartNotes.loadNotes}
+          segments={liveSegments}
+          onGenerateNote={handleGenerateNote}
+          useWebSearch={useWebSearch}
+          onToggleWebSearch={() => setUseWebSearch((v) => !v)}
+          hoveredNoteSegmentId={hoveredNoteSegmentId}
+          onHoverNote={setHoveredNoteSegmentId}
         />
 
         {/* Recording controls - only show when permissions are granted or already recording and not showing status messages */}

@@ -23,12 +23,24 @@ interface TranscriptPanelProps {
   isProcessingStop: boolean;
   isStopping: boolean;
   showModal: (name: ModalType, message?: string) => void;
+  onGenerateNote?: (segmentId: string, segmentText: string) => void;
+  activeSegmentId?: string | null;
+  processedSegmentIds?: Set<string>;
+  isGenerating?: boolean;
+  hoveredNoteSegmentId?: string | null;
+  onHoverSegment?: (segmentId: string | null) => void;
 }
 
 export function TranscriptPanel({
   isProcessingStop,
   isStopping,
-  showModal
+  showModal,
+  onGenerateNote,
+  activeSegmentId,
+  processedSegmentIds,
+  isGenerating,
+  hoveredNoteSegmentId,
+  onHoverSegment,
 }: TranscriptPanelProps) {
   // Contexts
   const { transcripts, transcriptContainerRef, copyTranscript } = useTranscripts();
@@ -113,6 +125,12 @@ export function TranscriptPanel({
               isStopping={isStopping}
               enableStreaming={isRecording}
               showConfidence={true}
+              onGenerateNote={onGenerateNote}
+              activeSegmentId={activeSegmentId}
+              processedSegmentIds={processedSegmentIds}
+              isGenerating={isGenerating}
+              hoveredNoteSegmentId={hoveredNoteSegmentId}
+              onHoverSegment={onHoverSegment}
             />
           </div>
         </div>
