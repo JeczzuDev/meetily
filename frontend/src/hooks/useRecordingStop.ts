@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { listen } from '@tauri-apps/api/event';
+import { invoke } from '@tauri-apps/api/core';
 import { toast } from 'sonner';
 import { useTranscripts } from '@/contexts/TranscriptContext';
 import { useSidebar } from '@/components/Sidebar/SidebarProvider';
@@ -52,6 +53,7 @@ export function useRecordingStop(
     flushBuffer,
     clearTranscripts,
     meetingTitle,
+    currentMeetingId,
     markMeetingAsSaved,
   } = useTranscripts();
 
@@ -264,6 +266,19 @@ export function useRecordingStop(
           console.log('✅ Successfully saved COMPLETE meeting with ID:', meetingId);
           console.log('   Transcripts:', freshTranscripts.length);
           console.log('   folder_path:', folderPath);
+
+          // Reassign Smart Notes from temporary live-recording ID to final saved meeting ID
+          if (currentMeetingId && currentMeetingId !== meetingId) {
+            try {
+              const reassigned = await invoke<number>('reassign_smart_notes_meeting', {
+                oldMeetingId: currentMeetingId,
+                newMeetingId: meetingId,
+              });
+              console.log(`✅ Reassigned ${reassigned} smart note(s) to meeting ${meetingId}`);
+            } catch (err) {
+              console.warn('Failed to reassign smart notes:', err);
+            }
+          }
 
           // Mark meeting as saved in IndexedDB (for recovery system)
           await markMeetingAsSaved();
